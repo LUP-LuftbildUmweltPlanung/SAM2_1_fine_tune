@@ -33,6 +33,17 @@ conda activate sam2
 pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 ```
 ```ruby
+git clone https://github.com/facebookresearch/sam2.git && cd sam2
+
+pip install -e .
+```
+```ruby
+cd checkpoints
+
+download_ckpts.sh
+```
+```ruby
+cd ..
 cd ../SAM2_fine_tune/environment
 ```
 ```ruby
