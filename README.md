@@ -23,57 +23,62 @@ The checkpoint which defined here in the pipeline is `sam2_hiera_large.pt`.
 
 ### Installation
 #### For Windows
-```ruby
-conda create -n sam2 python=3.11
-```
-```ruby
-conda activate sam2
-```
-```ruby
-pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
-```
-```ruby
-git clone https://github.com/facebookresearch/sam2.git && cd sam2
+# 1. Create and activate the Conda environment
+conda create -n sam2_1 python=3.11
+conda activate sam2_1
 
+# 2. Install PyTorch and its dependencies
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+
+# 3. Go to the main folder where the script is located
+cd ../sam2_1_fine_tune-main
+
+# 4. Clone the SAM2 repository and rename the folder to avoid conflicts
+git clone https://github.com/facebookresearch/sam2.git
+mv sam2 sam2_conf
+
+# 5. Change into the 'sam2_conf' directory and copy the 'sam2' folder to the 'sam2_1_fine_tune-main' folder
+cd sam2_conf
+cp -r sam2 ../sam2/
+
+# 6. Install the SAM2 package in editable mode
 pip install -e .
-```
-```ruby
-cd checkpoints
 
-download_ckpts.sh
-```
-```ruby
-cd ..
-cd ../SAM2_fine_tune/environment
-```
-```ruby
+# 7. Navigate to the 'checkpoints' folder and download model checkpoints
+cd checkpoints && download_ckpts.sh
+
+# 8. Go two directories up and install additional dependencies
+cd ../..
 pip install -r requirements.txt
-```
+
 #### For Linux
-```ruby
-conda create -n sam2 python=3.11
-```
-```ruby
-conda activate sam2
-```
-```ruby
-pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
-```
-```ruby
-conda install -c conda-forge gdal==3.6
-```
-```ruby
-conda config --env --add channels conda-forge
-```
-```ruby
-conda config --env --set channel_priority strict
-```
-```ruby
-cd ../SAM2_fine_tune/environment
-```
-```ruby
+# 1. Create and activate the Conda environment
+conda create -n sam2_1 python=3.11
+conda activate sam2_1
+
+# 2. Install PyTorch and its dependencies
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+
+# 3. Go to the main folder where the script is located
+cd ../sam2_1_fine_tune-main
+
+# 4. Clone the SAM2 repository and rename the folder to avoid conflicts
+git clone https://github.com/facebookresearch/sam2.git
+mv sam2 sam2_conf
+
+# 5. Change into the 'sam2_conf' directory and copy the 'sam2' folder to the 'sam2_1_fine_tune-main' folder
+cd sam2_conf
+cp -r sam2 ../sam2/
+
+# 6. Install the SAM2 package in editable mode
+pip install -e .
+
+# 7. Navigate to the 'checkpoints' folder and download model checkpoints
+cd checkpoints && download_ckpts.sh
+
+# 8. Go two directories up and install additional dependencies
+cd ../..
 pip install -r requirements_2.txt
-```
 ## Executing program
 set parameters and run in run_pipeline.py
 
