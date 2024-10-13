@@ -22,7 +22,8 @@ The checkpoint which defined here in the pipeline is `sam2_hiera_large.pt`.
 * developed on Windows 10
 
 ### Installation
-#### For Windows
+#### Installation Instructions (For Windows)
+```bash
 # 1. Create and activate the Conda environment
 conda create -n sam2_1 python=3.11
 conda activate sam2_1
@@ -50,6 +51,7 @@ cd checkpoints && download_ckpts.sh
 # 8. Go two directories up and install additional dependencies
 cd ../..
 pip install -r requirements.txt
+```
 
 #### For Linux
 # 1. Create and activate the Conda environment
