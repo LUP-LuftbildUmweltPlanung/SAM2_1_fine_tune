@@ -53,7 +53,8 @@ cd ../..
 pip install -r requirements.txt
 ```
 
-#### For Linux
+#### Installation Instructions (For Linux)
+```bash
 # 1. Create and activate the Conda environment
 conda create -n sam2_1 python=3.11
 conda activate sam2_1
@@ -81,6 +82,7 @@ cd checkpoints && download_ckpts.sh
 # 8. Go two directories up and install additional dependencies
 cd ../..
 pip install -r requirements_2.txt
+```
 ## Executing program
 set parameters and run in run_pipeline.py
 
