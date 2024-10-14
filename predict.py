@@ -81,7 +81,7 @@ def calculate_metrics(pred_masks, gt_masks):
     return precision, recall, f1
     
 def predict_and_save_tiles(input_folder, model_path, mode="binary", model_confg_predict="large", merge=False,
-                           class_zero=False, validation_vision=False, AOI=None, year=None, version = "sam2_1"):
+                           class_zero=False, validation_vision=False, AOI=None, year=None,threshold=0.38, version = "sam2_1"):
     """Predict canopy cover area for all tiles in a folder and save the results."""
     all_precisions = []
     all_recalls = []
@@ -184,7 +184,7 @@ def predict_and_save_tiles(input_folder, model_path, mode="binary", model_confg_
                 np_scores = np_scores.cpu().numpy()
 
             # Check if the maximum score is below a certain threshold, e.g., 0.001
-            if np_scores.max() < 0.38:
+            if np_scores.max() < threshold:
                 # Boost the scores if they are all very low
                 masks = np.zeros_like(masks)
             else:
@@ -289,7 +289,7 @@ def predict_and_save_tiles(input_folder, model_path, mode="binary", model_confg_
 
         print(f"Metrics saved to {result_path}")
 
-def predict_valid(input_folder, model_path, mode="binary", model_confg=None, class_zero=False, version = "sam2_1"):
+def predict_valid(input_folder, model_path, mode="binary", model_confg=None, class_zero=False,threshold=threshold, version = "sam2_1"):
     """Predict canopy cover area for all tiles in a folder and save the results."""
 
     # Adjust current_dir to the correct directory level
@@ -457,7 +457,7 @@ def predict_valid(input_folder, model_path, mode="binary", model_confg=None, cla
                 pred_mask_tensor = torch.tensor(pred_mask_np, dtype=torch.float32).cuda()
 
                 # Apply threshold to the predicted mask before calculating IoU
-                pred_mask_binary = (pred_mask_tensor > 0.5).float()
+                pred_mask_binary = (pred_mask_tensor > threshold).float()
 
                 # Calculate IoU using PyTorch tensors
                 inter = (true_mask_tensor * pred_mask_binary).sum()
