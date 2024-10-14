@@ -7,14 +7,14 @@ import torch
 
 # PARAMETERS
 Create_tiles = False
-Train = True
-Predict = False
-
+Train = False
+Predict = True
+version = "sam2_1" # define the version of sam "sam_2" or "sam2_1"
 
 # Paths
-image_path = r"/home/embedding/Data_Center/DataHouse/+DeepLearning_Extern/beschirmung/RGB_UNET_Modell/Daten/all_dataset/Augsburg_2022/Augsburg_2022_tDOP_RGB_8bit_stack_50cm.tif"
-mask_path = r"/home/embedding/Data_Center/DataHouse/+DeepLearning_Extern/beschirmung/RGB_UNET_Modell/Daten/all_dataset/Augsburg_2022/augsburg_2022_canopy_cover_binary_50cm.tif"
-base_dir = r"/home/embedding/Data_Center/DataHouse/+DeepLearning_Extern/beschirmung/RGB_UNET_Modell/Daten/Augesburg_sam2_test"
+image_path = r"PATH"
+mask_path = r"PATH"
+base_dir = r"PATH" # define the path to save all the created tiles
 
 
 # Tile creation parameters
@@ -27,31 +27,29 @@ class_zero = True # Enable for seperating 0 prediction class from nodata
 
 
 # Training parameters
-base_dir_train = r"H:\+DeepLearning_Extern\beschirmung\RGB_UNET_Modell\Daten\test_8bit\trai" # Path where two folders: "img_tiles" & "mask_tiles" existmodel_path = r"/home/embedding/Data_Center/DataHouse/+DeepLearning_Extern/beschirmung/RGB_UNET_Modell/Daten/model_path/test" # to save the trained model
-model_path = r"C:\Users\QuadroRTX\Downloads\fine_tune_sam2\canopy_model" # to save the trained model
-description = "des"
+base_dir_train = r"PATH" # Path where two folders: "img_tiles" & "mask_tiles"
+model_path = r"PATH" # to save the trained model
+description = "Canopy_mdoel" # give the name of saved model. For example "model_Canopy_mdoel_best.torch"
 model_confg = "large" # 'large', 'base_plus', 'small', 'tiny'  which are  4 different pre-trained SAM 2 models
 mode = "binary" # binary if the dataset is (0,1) classification, else #"multi-label"
 LEARNING_RATE = 1e-5
 EPOCHS = 3
-VALID_SCENES = 'vali' # the name of the folder where the validation dataset, 'vali' or 'test'
+VALID_SCENES = 'vali' # the name of the folder where the validation dataset, 'vali' or 'test' if you create three different folders in create tiles part
 accuracy_metric = 'loss' # "iou" or "loss
 save_confusion_matrix = True # A boolean to enable or disable saving the confusion matrix table."
-# confusion matrix
 num_classes = 2  # Update for the correct number of classes
-# Define human-readable class labels
-class_labels = ["Background", "Beschirmung"]
+class_labels = ["Background", "Beschirmung"] # Define human-readable class labels
 
 
 
 # Prediction parameters
-predict_path = r"H:\+DeepLearning_Extern\beschirmung\RGB_UNET_Modell\Daten\test_8bit\vali\img_tiles" # define the images path
-predict_model = r"C:\Users\QuadroRTX\Downloads\fine_tune_sam2\canopy_model\model_des_best.torch" # the path where the model saved and the name of the model "name.torch"
-AOI = "Dingolfing_038" # Area of Interest (AOI). This parameter is used to append the output TIFF file to define the city of the prediction data.
+predict_path = r"PATH" # define the images path
+predict_model = r"PATH" # the path where the model saved and the name of the model "model_Canopy_mdoel_best.torch"
+AOI = "Dingolfing" # Area of Interest (AOI). This parameter is used to append the output TIFF file to define the city of the prediction data.
 year = "2018" # the year of the prediction data. To append the output TIFF file to define the year.
 validation_vision = True # Confusion matrix and classification report figures, Keep merge and regression False to work!
 model_confg_predict = "large" # 'large', 'base_plus', 'small', 'tiny'  which are  4 different pre-trained SAM 2 models
-merge = True
+merge = True # merge all the predicted tiles in one ratser file
 
 
 def main():
@@ -88,7 +86,8 @@ def main():
             accuracy_metric = accuracy_metric,
             save_confusion_matrix = save_confusion_matrix,
             num_classes=num_classes,
-            class_labels=class_labels
+            class_labels=class_labels,
+            version=version
 
         )
 
@@ -103,6 +102,7 @@ def main():
             validation_vision=validation_vision,
             AOI=AOI,
             year=year,
+            version=version
         )
 
     end_time = time.time()
