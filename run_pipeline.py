@@ -47,6 +47,7 @@ predict_path = r"PATH" # define the images path
 predict_model = r"PATH" # the path where the model saved and the name of the model "model_Canopy_mdoel_best.torch"
 AOI = "Dingolfing" # Area of Interest (AOI). This parameter is used to append the output TIFF file to define the city of the prediction data.
 year = "2018" # the year of the prediction data. To append the output TIFF file to define the year.
+threshold = 0.38      # Classification threshold
 validation_vision = True # Confusion matrix and classification report figures, Keep merge and regression False to work!
 model_confg_predict = "large" # 'large', 'base_plus', 'small', 'tiny'  which are  4 different pre-trained SAM 2 models
 merge = True # merge all the predicted tiles in one ratser file
@@ -102,6 +103,7 @@ def main():
             validation_vision=validation_vision,
             AOI=AOI,
             year=year,
+            threshold=threshold,
             version=version
         )
 
