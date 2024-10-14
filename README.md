@@ -47,9 +47,11 @@ pip install -e .
 
 # 7. Navigate to the 'checkpoints' folder and download model checkpoints
 cd checkpoints && download_ckpts.sh
+cd ../..
+cd checkpoints_ && download_ckpts.sh
 
 # 8. Go two directories up and install additional dependencies
-cd ../..
+cd ..
 pip install -r requirements.txt
 ```
 
@@ -78,10 +80,12 @@ pip install -e .
 
 # 7. Navigate to the 'checkpoints' folder and download model checkpoints
 cd checkpoints && download_ckpts.sh
+cd ../..
+cd checkpoints_ && download_ckpts.sh
 
 # 8. Go two directories up and install additional dependencies
-cd ../..
-pip install -r requirements_2.txt
+cd ..
+pip install -r requirements.txt
 ```
 ## Executing program
 set parameters and run in run_pipeline.py
