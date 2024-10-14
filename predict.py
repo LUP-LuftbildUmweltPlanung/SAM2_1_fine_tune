@@ -17,6 +17,7 @@ import imageio.v2 as imageio
 import hydra
 
 
+# function to read the binary masks
 def read_mask(image_path):
     """Read a mask image from a TIFF file."""
     if not os.path.exists(image_path):
@@ -24,14 +25,13 @@ def read_mask(image_path):
 
     return imageio.imread(image_path)  # Read the TIFF file as an array
 
-
+# function to read the whole images 
 def read_image(image_path):
     """Read and resize image using Pillow."""
     if not os.path.exists(image_path):
         raise FileNotFoundError(f"Image file not found: {image_path}")
     img = Image.open(image_path).convert('RGB')  # Convert to RGB
     return np.array(img)
-
 
 # Merge all the predicted file function
 def merge_files(output_folder, AOI, year):
@@ -59,37 +59,70 @@ def merge_files(output_folder, AOI, year):
     gdal.Warp(output_file, tif_files, options=warp_options)
     print(f"Merged file created at: {output_file}")
 
+# calculate classufucation report
+def calculate_metrics(pred_masks, gt_masks):
+    # Flatten masks for metric calculations
+    pred_flat = pred_masks.flatten()
+    gt_flat = gt_masks.flatten()
+
+    # Determine if data is binary or multiclass
+    unique_labels = np.unique(gt_flat)
+
+    if len(unique_labels) <= 2:  # binary case
+        average_method = 'binary'
+    else:  # multiclass case
+        average_method = 'macro'
+
+    # Calculate metrics using the appropriate average method
+    precision = precision_score(gt_flat, pred_flat, average=average_method, zero_division=0)
+    recall = recall_score(gt_flat, pred_flat, average=average_method, zero_division=0)
+    f1 = f1_score(gt_flat, pred_flat, average=average_method, zero_division=0)
+
+    return precision, recall, f1
+    
 def predict_and_save_tiles(input_folder, model_path, mode="binary", model_confg_predict="large", merge=False,
-                           class_zero=False, validation_vision=False, AOI=None, year=None):
+                           class_zero=False, validation_vision=False, AOI=None, year=None, version = "sam2_1"):
     """Predict canopy cover area for all tiles in a folder and save the results."""
     all_precisions = []
     all_recalls = []
     all_f1s = []
+                               
+    # Set to the current directory
+    current_dir = os.path.abspath(os.path.dirname(__file__))  
+    if version== "sam2_1":
+        # Define the checkpoint and config paths based on model configuration
+        if 'large' in model_confg_predict:
+            checkpoint = "sam2.1_hiera_large.pt"
+            cfg_name = 'sam2.1_hiera_l.yaml'
+        elif 'base_plus' in model_confg_predict:
+            checkpoint = "sam2.1_hiera_base_plus.pt"
+            cfg_name = 'sam2.1_hiera_b+.yaml'
+        elif 'small' in model_confg_predict:
+            checkpoint = "sam2.1_hiera_small.pt"
+            cfg_name = 'sam2.1_hiera_s.yaml'
+        elif 'tiny' in model_confg_predict:
+            checkpoint = "sam2.1_hiera_tiny.pt"
+            cfg_name = 'sam2.1_hiera_t.yaml'
 
-    # Adjust current_dir to the correct directory level
-    current_dir = os.path.abspath(os.path.dirname(__file__))  # Set to the current directory
-    print(f"Current directory: {current_dir}")
+        # Set the paths for checkpoints and config files
+        sam2_checkpoint = os.path.join(current_dir, "sam2_conf/checkpoints", checkpoint)
+        config_dir = os.path.join(current_dir, "sam2/configs", "sam2.1")
+    else: # sam2 
+        if 'large' in model_confg_predict:
+            checkpoint = "sam2_hiera_large.pt"
+            cfg_name = 'sam2_hiera_l.yaml'
+        elif 'base_plus' in model_confg_predict:
+            checkpoint = "sam2_hiera_base_plus.pt"
+            cfg_name = 'sam2_hiera_b+.yaml'
+        elif 'small' in model_confg_predict:
+            checkpoint = "sam2_hiera_small.pt"
+            cfg_name = 'sam2_hiera_s.yaml'
+        elif 'tiny' in model_confg_predict:
+            checkpoint = "sam2_hiera_tiny.pt"
+            cfg_name = 'sam2_hiera_t.yaml'
 
-    # Define the checkpoint and config paths based on model configuration
-    if 'large' in model_confg_predict:
-        checkpoint = "sam2.1_hiera_large.pt"
-        cfg_name = 'sam2.1_hiera_l.yaml'
-    elif 'base_plus' in model_confg_predict:
-        checkpoint = "sam2.1_hiera_base_plus.pt"
-        cfg_name = 'sam2.1_hiera_b+.yaml'
-    elif 'small' in model_confg_predict:
-        checkpoint = "sam2.1_hiera_small.pt"
-        cfg_name = 'sam2.1_hiera_s.yaml'
-    elif 'tiny' in model_confg_predict:
-        checkpoint = "sam2.1_hiera_tiny.pt"
-        cfg_name = 'sam2.1_hiera_t.yaml'
-    else:
-        checkpoint = "sam2.1_hiera_large.pt"
-        cfg_name = 'sam2.1_hiera_l.yaml'
-
-    # Set the paths for checkpoints and config files
-    sam2_checkpoint = os.path.join(current_dir, "sam2_conf/checkpoints", checkpoint)
-    config_dir = os.path.join(current_dir, "sam2/configs", "sam2.1")
+        sam2_checkpoint = os.path.join(current_dir, "checkpoints_sam2", checkpoint)
+        config_dir = os.path.join(current_dir, "sam2/configs", "sam2")
 
     # Verify that the checkpoint and config files exist
     if not os.path.exists(sam2_checkpoint):
@@ -140,9 +173,6 @@ def predict_and_save_tiles(input_folder, model_path, mode="binary", model_confg_
                     point_labels=None,
                     multimask_output=False
                 )
-            #print("mask first", masks)
-            #print("first score", scores)
-            #print("first logits", logits)
             # Check if scores are 1-dimensional and handle accordingly
             if scores.ndim == 1:
                 np_scores = scores
@@ -259,55 +289,50 @@ def predict_and_save_tiles(input_folder, model_path, mode="binary", model_confg_
 
         print(f"Metrics saved to {result_path}")
 
-
-
-def calculate_metrics(pred_masks, gt_masks):
-    # Flatten masks for metric calculations
-    pred_flat = pred_masks.flatten()
-    gt_flat = gt_masks.flatten()
-
-    # Determine if data is binary or multiclass
-    unique_labels = np.unique(gt_flat)
-
-    if len(unique_labels) <= 2:  # binary case
-        average_method = 'binary'
-    else:  # multiclass case
-        average_method = 'macro'
-
-    # Calculate metrics using the appropriate average method
-    precision = precision_score(gt_flat, pred_flat, average=average_method, zero_division=0)
-    recall = recall_score(gt_flat, pred_flat, average=average_method, zero_division=0)
-    f1 = f1_score(gt_flat, pred_flat, average=average_method, zero_division=0)
-
-    return precision, recall, f1
-
-def predict_valid(input_folder, model_path, mode="binary", model_confg=None, class_zero=False):
+def predict_valid(input_folder, model_path, mode="binary", model_confg=None, class_zero=False, version = "sam2_1"):
     """Predict canopy cover area for all tiles in a folder and save the results."""
 
     # Adjust current_dir to the correct directory level
     current_dir = os.path.abspath(os.path.dirname(__file__))  # Set to the current directory
-    print(f"Current directory: {current_dir}")
+    if version== "sam2_1":
+        # Define the checkpoint and config paths based on model configuration
+        if 'large' in model_confg:
+            checkpoint = "sam2.1_hiera_large.pt"
+            cfg_name = 'sam2.1_hiera_l.yaml'
+        elif 'base_plus' in model_confg:
+            checkpoint = "sam2.1_hiera_base_plus.pt"
+            cfg_name = 'sam2.1_hiera_b+.yaml'
+        elif 'small' in model_confg:
+            checkpoint = "sam2.1_hiera_small.pt"
+            cfg_name = 'sam2.1_hiera_s.yaml'
+        elif 'tiny' in model_confg:
+            checkpoint = "sam2.1_hiera_tiny.pt"
+            cfg_name = 'sam2.1_hiera_t.yaml'
+        else:
+            checkpoint = "sam2.1_hiera_large.pt"
+            cfg_name = 'sam2.1_hiera_l.yaml'
 
-    # Define the checkpoint and config paths based on model configuration
-    if 'large' in model_confg:
-        checkpoint = "sam2.1_hiera_large.pt"
-        cfg_name = 'sam2.1_hiera_l.yaml'
-    elif 'base_plus' in model_confg:
-        checkpoint = "sam2.1_hiera_base_plus.pt"
-        cfg_name = 'sam2.1_hiera_b+.yaml'
-    elif 'small' in model_confg:
-        checkpoint = "sam2.1_hiera_small.pt"
-        cfg_name = 'sam2.1_hiera_s.yaml'
-    elif 'tiny' in model_confg:
-        checkpoint = "sam2.1_hiera_tiny.pt"
-        cfg_name = 'sam2.1_hiera_t.yaml'
+        # Set the paths for checkpoints and config files
+        sam2_checkpoint = os.path.join(current_dir, "sam2_conf/checkpoints", checkpoint)
+        config_dir = os.path.join(current_dir, "sam2/configs", "sam2.1")
     else:
-        checkpoint = "sam2.1_hiera_large.pt"
-        cfg_name = 'sam2.1_hiera_l.yaml'
+        if 'large' in model_confg:
+            checkpoint = "sam2_hiera_large.pt"
+            cfg_name = 'sam2_hiera_l.yaml'
+        elif 'base_plus' in model_confg:
+            checkpoint = "sam2_hiera_base_plus.pt"
+            cfg_name = 'sam2_hiera_b+.yaml'
+        elif 'small' in model_confg:
+            checkpoint = "sam2_hiera_small.pt"
+            cfg_name = 'sam2_hiera_s.yaml'
+        elif 'tiny' in model_confg:
+            checkpoint = "sam2_hiera_tiny.pt"
+            cfg_name = 'sam2_hiera_t.yaml'
 
-    # Set the paths for checkpoints and config files
-    sam2_checkpoint = os.path.join(current_dir, "sam2_conf/checkpoints", checkpoint)
-    config_dir = os.path.join(current_dir, "sam2/configs", "sam2.1")
+
+        sam2_checkpoint = os.path.join(current_dir, "checkpoints_sam2", checkpoint)
+        config_dir = os.path.join(current_dir, "sam2/configs", "sam2")
+
 
     # Verify that the checkpoint and config files exist
     if not os.path.exists(sam2_checkpoint):
@@ -316,12 +341,15 @@ def predict_valid(input_folder, model_path, mode="binary", model_confg=None, cla
     if not os.path.exists(os.path.join(config_dir, cfg_name)):
         raise FileNotFoundError(f"Config file not found at: {os.path.join(config_dir, cfg_name)}")
 
+
     # Re-initialize Hydra configuration for validation
     hydra.core.global_hydra.GlobalHydra.instance().clear()
     hydra.initialize_config_dir(config_dir=config_dir, version_base='1.2')
 
+    # Build the SAM2 model using the configuration and checkpoint
     sam2_model = build_sam2(cfg_name, sam2_checkpoint, device="cuda")
     predictor = SAM2ImagePredictor(sam2_model)
+
 
     # Load the pre-trained weights from the model path
     predictor.model.load_state_dict(torch.load(model_path, map_location="cuda"))
