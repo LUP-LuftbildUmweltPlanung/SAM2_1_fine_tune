@@ -12,7 +12,6 @@ The key distinction between fine-tuning a model and training one from scratch li
 
 The dataset used for fine-tuning SAM 2 consisted of 8-bit RGB images with 50 cm resolution for binary segmentation tasks.
 
-The checkpoint which defined here in the pipeline is `sam2_hiera_large.pt`. 
 
 ## Getting Started
 
