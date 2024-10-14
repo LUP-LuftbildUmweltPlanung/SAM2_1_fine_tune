@@ -88,6 +88,7 @@ def main():
             save_confusion_matrix = save_confusion_matrix,
             num_classes=num_classes,
             class_labels=class_labels,
+            threshold=threshold,
             version=version
 
         )
