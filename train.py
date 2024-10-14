@@ -13,31 +13,48 @@ from sam2.build_sam import build_sam2
 from sam2.sam2_image_predictor import SAM2ImagePredictor
 import hydra
 
-
 def train_func(base_dir_train, model_confg, epoch, model_path, LEARNING_RATE, description,
                mode="binary", class_zero=False, VALID_SCENES="vali", accuracy_metric='iou', save_confusion_matrix=True,
-               num_classes=2, class_labels=list):
+               num_classes=2, class_labels=list, version = "sam2_1"):
     # Adjust current_dir to the correct directory level
     current_dir = os.path.abspath(os.path.dirname(__file__))  # Set to the current directory
-    #print(f"Current directory: {current_dir}")
+    if version== "sam2_1":
+        # Define the checkpoint and config paths based on model configuration
+        if 'large' in model_confg:
+            checkpoint = "sam2.1_hiera_large.pt"
+            cfg_name = 'sam2.1_hiera_l.yaml'
+        elif 'base_plus' in model_confg:
+            checkpoint = "sam2.1_hiera_base_plus.pt"
+            cfg_name = 'sam2.1_hiera_b+.yaml'
+        elif 'small' in model_confg:
+            checkpoint = "sam2.1_hiera_small.pt"
+            cfg_name = 'sam2.1_hiera_s.yaml'
+        elif 'tiny' in model_confg:
+            checkpoint = "sam2.1_hiera_tiny.pt"
+            cfg_name = 'sam2.1_hiera_t.yaml'
 
-    # Define the checkpoint and config paths based on model configuration
-    if 'large' in model_confg:
-        checkpoint = "sam2.1_hiera_large.pt"
-        cfg_name = 'sam2.1_hiera_l.yaml'
-    elif 'base_plus' in model_confg:
-        checkpoint = "sam2.1_hiera_base_plus.pt"
-        cfg_name = 'sam2.1_hiera_b+.yaml'
-    elif 'small' in model_confg:
-        checkpoint = "sam2.1_hiera_small.pt"
-        cfg_name = 'sam2.1_hiera_s.yaml'
-    elif 'tiny' in model_confg:
-        checkpoint = "sam2.1_hiera_tiny.pt"
-        cfg_name = 'sam2.1_hiera_t.yaml'
+        # Set the paths for checkpoints and config files
+        sam2_checkpoint = os.path.join(current_dir, "sam2_conf/checkpoints", checkpoint)
+        config_dir = os.path.join(current_dir, "sam2/configs", "sam2.1")
+    else:
+        if 'large' in model_confg:
+            checkpoint = "sam2_hiera_large.pt"
+            cfg_name = 'sam2_hiera_l.yaml'
+        elif 'base_plus' in model_confg:
+            checkpoint = "sam2_hiera_base_plus.pt"
+            cfg_name = 'sam2_hiera_b+.yaml'
+        elif 'small' in model_confg:
+            checkpoint = "sam2_hiera_small.pt"
+            cfg_name = 'sam2_hiera_s.yaml'
+        elif 'tiny' in model_confg:
+            checkpoint = "sam2_hiera_tiny.pt"
+            cfg_name = 'sam2_hiera_t.yaml'
 
-    # Set the paths for checkpoints and config files
-    sam2_checkpoint = os.path.join(current_dir, "sam2_conf/checkpoints", checkpoint)
-    config_dir = os.path.join(current_dir, "sam2/configs", "sam2.1")
+        sam2_checkpoint = os.path.join(current_dir, "checkpoints_sam2", checkpoint)
+        print("checkpooints", sam2_checkpoint)
+        config_dir = os.path.join(current_dir, "sam2/configs", "sam2")
+        print("config", config_dir)
+
 
     # Verify that the checkpoint and config files exist
     if not os.path.exists(sam2_checkpoint):
@@ -83,6 +100,7 @@ def train_func(base_dir_train, model_confg, epoch, model_path, LEARNING_RATE, de
             points.append([[yx[1], yx[0]]])
 
         return Img, np.array(masks), np.array(points), np.ones([len(masks), 1])
+
     # Validation step
     hydra.core.global_hydra.GlobalHydra.instance().clear()
     hydra.initialize_config_dir(config_dir=config_dir, version_base='1.2')
@@ -97,7 +115,6 @@ def train_func(base_dir_train, model_confg, epoch, model_path, LEARNING_RATE, de
 
     best_iou = 0
     best_model_path = None
-
     confusion_matrices = []
     train_ious = []
     training_losses = []
@@ -187,18 +204,25 @@ def train_func(base_dir_train, model_confg, epoch, model_path, LEARNING_RATE, de
         print(f"Epoch {itr + 1} - Mean IoU: {epoch_mean_iou}, Mean Loss: {epoch_mean_loss}")
 
         # Validation step
-        #hydra.core.global_hydra.GlobalHydra.instance().clear()
-        #hydra.initialize_config_dir(config_dir=config_dir, version_base='1.2')
+        base_dir_valid = os.path.join(os.path.dirname(base_dir_train), VALID_SCENES)
 
-        with tempfile.NamedTemporaryFile(suffix=".torch", delete=False, dir="temp_file/") as temp_model_file:
-            temp_model_path = temp_model_file.name
-            torch.save(predictor.model.state_dict(), temp_model_file.name)
-            base_dir_valid = os.path.join(os.path.dirname(base_dir_train), VALID_SCENES)
+        # Create the temp_file directory inside base_dir_valid
+        temp_file_dir = os.path.join(current_dir, "temp_file")
+        if not os.path.exists(temp_file_dir):
+            os.makedirs(temp_file_dir)  # Create the temp_file directory if it doesn't exist
+
+        # Create a temporary file in the temp_file directory
+        with tempfile.NamedTemporaryFile(dir=temp_file_dir, suffix=".torch", delete=False) as temp_model_file:
+            temp_model_path = temp_model_file.name  # Save the path of the temp file
+
+            # Save the model's state dictionary to the temp file
+            torch.save(predictor.model.state_dict(), temp_model_path)
+
             print(f"Temporary file saved at: {temp_model_file.name}")
 
             mean_valid_iou, mean_valid_loss, true_mask_flat, pred_mask_flat = predict_valid(
-                base_dir_valid, temp_model_file.name, mode, model_confg=model_confg, class_zero=class_zero
-            )
+                base_dir_valid, temp_model_file.name, mode, model_confg=model_confg, class_zero=class_zero,
+            version = version)
             validation_ious.append(mean_valid_iou)
             validation_losses.append(mean_valid_loss)
             print(f"Epoch {itr + 1} - Validation: Mean IoU: {mean_valid_iou}, Mean Loss: {mean_valid_loss}")
