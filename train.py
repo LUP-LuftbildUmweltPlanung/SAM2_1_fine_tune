@@ -15,7 +15,7 @@ import hydra
 
 def train_func(base_dir_train, model_confg, epoch, model_path, LEARNING_RATE, description,
                mode="binary", class_zero=False, VALID_SCENES="vali", accuracy_metric='iou', save_confusion_matrix=True,
-               num_classes=2, class_labels=list, version = "sam2_1"):
+               num_classes=2, class_labels=list,threshold=0.38, version = "sam2_1"):
     # Adjust current_dir to the correct directory level
     current_dir = os.path.abspath(os.path.dirname(__file__))  # Set to the current directory
     if version== "sam2_1":
@@ -222,7 +222,7 @@ def train_func(base_dir_train, model_confg, epoch, model_path, LEARNING_RATE, de
 
             mean_valid_iou, mean_valid_loss, true_mask_flat, pred_mask_flat = predict_valid(
                 base_dir_valid, temp_model_file.name, mode, model_confg=model_confg, class_zero=class_zero,
-            version = version)
+            threshold=threshold, version = version)
             validation_ious.append(mean_valid_iou)
             validation_losses.append(mean_valid_loss)
             print(f"Epoch {itr + 1} - Validation: Mean IoU: {mean_valid_iou}, Mean Loss: {mean_valid_loss}")
