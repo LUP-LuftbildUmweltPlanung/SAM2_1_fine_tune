@@ -85,7 +85,7 @@ cd checkpoints_sam2 && download_ckpts.sh
 
 # 8. Go two directories up and install additional dependencies
 cd environment
-pip install -r requirements.txt
+pip install -r requirements_2.txt
 ```
 ## Executing program
 set parameters and run in run_pipeline.py
