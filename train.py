@@ -110,8 +110,14 @@ def train_func(base_dir_train, model_confg, epoch, model_path, LEARNING_RATE, de
 
     predictor.model.sam_mask_decoder.train(True)
     predictor.model.sam_prompt_encoder.train(True)
+
+    '''
+    #The main part of the net is the image encoder, if you have good GPU you can enable training of this part by using:
+    predictor.model.image_encoder.train(True)
+    #Note that for this case, you will also need to scan the SAM2 code for “no_grad” commands and remove them (“ no_grad” blocks the gradient collection, which saves memory but prevents training).
+    '''
     optimizer = torch.optim.AdamW(params=predictor.model.parameters(), lr=LEARNING_RATE, weight_decay=4e-5)
-    scaler = torch.cuda.amp.GradScaler()
+    scaler = torch.cuda.amp.GradScaler() # a more memory-efficient training strategy ( # set mixed precision ) 
 
     best_iou = 0
     best_model_path = None
@@ -127,13 +133,14 @@ def train_func(base_dir_train, model_confg, epoch, model_path, LEARNING_RATE, de
         epoch_mean_loss = 0.0
 
         for idx in tqdm(range(num_train_files), desc=f"Epoch {itr + 1}/{epoch}"):
-            with torch.cuda.amp.autocast():
-                image, masks, input_points, input_labels = read_batch(train_data, idx)
-                if masks.shape[0] == 0:
+            with torch.cuda.amp.autocast():  # cast to mix precision
+                image, masks, input_points, input_labels = read_batch(train_data, idx) # load data batch
+                if masks.shape[0] == 0: # ignore empty batches
                     continue
 
-                predictor.set_image(image)
+                predictor.set_image(image) # apply SAM image encoder to the image
 
+              # process the input points using the net prompt encoder
                 mask_input, unnorm_coords, labels, unnorm_box = predictor._prep_prompts(
                     input_points, input_labels, box=None, mask_logits=None, normalize_coords=True
                 )
@@ -141,7 +148,8 @@ def train_func(base_dir_train, model_confg, epoch, model_path, LEARNING_RATE, de
                     points=(unnorm_coords, labels), boxes=None, masks=None,
                 )
 
-                batched_mode = unnorm_coords.shape[0] > 1
+              # Now that we encoded both the prompt (points) and the image we can finally predict the segmentation masks
+                batched_mode = unnorm_coords.shape[0] > 1 # multi mask prediction
                 high_res_features = [feat_level[-1].unsqueeze(0) for feat_level in
                                      predictor._features["high_res_feats"]]
                 low_res_masks, prd_scores, _, _ = predictor.model.sam_mask_decoder(
@@ -153,19 +161,26 @@ def train_func(base_dir_train, model_confg, epoch, model_path, LEARNING_RATE, de
                     repeat_image=batched_mode,
                     high_res_features=high_res_features,
                 )
-                prd_masks = predictor._transforms.postprocess_masks(low_res_masks, predictor._orig_hw[-1])
+                prd_masks = predictor._transforms.postprocess_masks(low_res_masks, predictor._orig_hw[-1]) # Upscale the masks to the original image resolution
 
                 if mode == "binary":
-                    gt_mask = torch.tensor(masks.astype(np.float32)).cuda()
-                    prd_mask = torch.sigmoid(prd_masks[:, 0])
+                  # Loss functions:  we use the standard cross entropy loss
+                    gt_mask = torch.tensor(masks.astype(np.float32)).cuda() # convert the ground truth mask into a torch tensor
+                    prd_mask = torch.sigmoid(prd_masks[:, 0]) # Turn logit map to probability map
+                    # first method
+                    # seg_loss = (-gt_mask * torch.log(prd_mask + 0.00001) - (1 - gt_mask) * torch.log((1 - prd_mask) + 0.00001)).mean() # cross entropy loss 
+                    # second one
                     smooth = 1e-5
                     intersection = (gt_mask * prd_mask).sum()
                     dice_loss = 1 - (2. * intersection + smooth) / (gt_mask.sum() + prd_mask.sum() + smooth)
                     seg_loss = dice_loss
-                    inter = (gt_mask * (prd_mask > 0.5)).sum(1).sum(1)
-                    iou = inter / (gt_mask.sum(1).sum(1) + (prd_mask > 0.5).sum(1).sum(1) - inter)
+                    # comparing the GT mask and the corresponding predicted mask using intersection over union (IOU) metrics
+                    # IOU is simply the overlap between the two masks, divided by the combined area of the two masks.
+                    inter = (gt_mask * (prd_mask > 0.5)).sum(1).sum(1) # calculate the intersection between the predicted and GT mask, threshold (prd_mask > 0.5) to turn the prediction mask from probability to binary mask.
+                    iou = inter / (gt_mask.sum(1).sum(1) + (prd_mask > 0.5).sum(1).sum(1) - inter) # dividing the intersection by the combined area (union) of the predicted and gt masks
+                    # using the IOU as the true score for each mask, and get the score loss as the absolute difference between the predicted scores and the IOU we just calculated
                     score_loss = torch.abs(prd_scores[:, 0] - iou).mean()
-                    loss = seg_loss + score_loss * 0.05
+                    loss = seg_loss + score_loss * 0.05 # merge the segmentation loss and score loss 
 
                 else:  # multi-label
                     batch_seg_loss = 0
@@ -187,11 +202,11 @@ def train_func(base_dir_train, model_confg, epoch, model_path, LEARNING_RATE, de
                         batch_iou_loss += score_loss
 
                     loss = batch_seg_loss + batch_iou_loss * 0.05
-
-                predictor.model.zero_grad()
-                scaler.scale(loss).backward()
+                # Final step: Backpropogation and saving model
+                predictor.model.zero_grad() # empty gradient
+                scaler.scale(loss).backward() # Backpropogate
                 scaler.step(optimizer)
-                scaler.update()
+                scaler.update() # Mix precision
 
                 num_batches += 1
                 epoch_mean_iou += np.mean(iou.cpu().detach().numpy())
