@@ -166,8 +166,8 @@ def predict_and_save_tiles(input_folder, model_path, mode="binary", model_confg_
                 image = ((image - image.min()) / (image.max() - image.min()) * 255).astype(np.uint8)
 
             # Predict masks for the entire image automatically by not passing any points
-            with torch.no_grad():
-                predictor.set_image(image)
+            with torch.no_grad(): # prevent the net from caclulate gradient (more efficient inference)
+                predictor.set_image(image) # image encoder
                 masks, scores, logits = predictor.predict(
                     point_coords=None,
                     point_labels=None,
@@ -201,7 +201,11 @@ def predict_and_save_tiles(input_folder, model_path, mode="binary", model_confg_
                 occupancy_mask = np.zeros_like(sorted_masks[0], dtype=bool)
             else:
                 raise ValueError("Unexpected mask dimensions: expected 3D array for masks")
-
+            '''
+            Next, we add the masks one by one (from high to low score) to the segmentation map. 
+            We only add a mask if it’s consistent with the masks that were previously added,
+            which means only if the mask we want to add has less than 15% overlap with already occupied areas.
+            '''
             for i in range(sorted_masks.shape[0]):
                 mask = sorted_masks[i].astype(bool)
                 if mask.sum() == 0:
