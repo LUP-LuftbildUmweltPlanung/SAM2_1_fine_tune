@@ -1,8 +1,48 @@
+import os
 from create_tiles_unet import split_raster
 from predict import predict_and_save_tiles
 from train import train_func
 import time
 import torch
+import warnings
+import mlflow
+import mlflow.pytorch
+from mlflow.tracking import MlflowClient
+from mlflow_config import *
+
+warnings.filterwarnings("ignore", category=UserWarning)
+os.environ['GDAL_CACHEMAX'] = '512'  # Set to 1024 MB (adjust based on available RAM)
+
+# set Mlflow request
+os.environ["MLFLOW_HTTP_REQUEST_TIMEOUT"] = "300"
+
+# Initialize Mlflow Client
+client = MlflowClient()
+
+# Define Experiment name
+experiment_name = "Fine_Tune_Segment_Anything2"
+
+# check if experiment Exists
+experiment = client.get_experiment_by_name(experiment_name)
+
+# create new exp if not found
+if experiment is None:
+    print(f" Experiment '{experiment_name}' not found! Creating a new one...")
+    experiment_id = client.create_experiment(name=experiment_name)
+    print(f" Created new experiment: {experiment_name} (ID: {experiment_id})")
+else:
+    experiment_id = experiment.experiment_id
+    print(f" Using existing experiment: {experiment_name} (ID: {experiment_id})")
+
+# set the Active Experiment
+mlflow.set_experiment(experiment_name)
+
+# confirm Artifact Location:
+experiment = client.get_experiment(experiment_id)
+print(f" Experiment '{experiment_name}' Artifact Location: {experiment.artifact_location}")
+
+
+
 
 
 # PARAMETERS
@@ -37,9 +77,11 @@ EPOCHS = 3
 VALID_SCENES = 'vali' # the name of the folder where the validation dataset, 'vali' or 'test' if you create three different folders in create tiles part
 threshold = 0.38      # Classification threshold
 accuracy_metric = 'loss' # "iou" or "loss
+loss_type="dice" # BCE
 save_confusion_matrix = True # A boolean to enable or disable saving the confusion matrix table."
 num_classes = 2  # Update for the correct number of classes
 class_labels = ["Background", "Beschirmung"] # Define human-readable class labels
+register_model = False
 
 
 
@@ -89,7 +131,9 @@ def main():
             num_classes=num_classes,
             class_labels=class_labels,
             threshold=threshold,
-            version=version
+            version=version,
+            loss_type=loss_type,
+            register_model= register_model
 
         )
 
@@ -105,7 +149,8 @@ def main():
             AOI=AOI,
             year=year,
             threshold=threshold,
-            version=version
+            version=version,
+            loss_type=loss_type
         )
 
     end_time = time.time()
