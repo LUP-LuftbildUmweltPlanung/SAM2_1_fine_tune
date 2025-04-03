@@ -13,17 +13,12 @@ from sam2.build_sam import build_sam2
 from sam2.sam2_image_predictor import SAM2ImagePredictor
 import hydra
 import mlflow
-import time
+
 
 def train_func(base_dir_train, model_confg, epoch, model_path, LEARNING_RATE, description,
                mode="binary", class_zero=False, VALID_SCENES="vali", accuracy_metric='iou', save_confusion_matrix=True,
                num_classes=2, class_labels=list,threshold=0.38, version = "sam2_1",  loss_type="dice", register_model= True):
     with mlflow.start_run(run_name=f"sam2_train_{description}") as run:
-        # define the run id
-        run_id = run.info.run_id
-
-        # start the running time
-        start_time = time.time()  # Start timer for total runtime tracking
         # Adjust current_dir to the correct directory level
         current_dir = os.path.abspath(os.path.dirname(__file__))  # Set to the current directory
         if version== "sam2_1":
@@ -78,9 +73,34 @@ def train_func(base_dir_train, model_confg, epoch, model_path, LEARNING_RATE, de
         # List of training image files
         train_data = [{"image": os.path.join(IMG_path_train, img_name), "mask": os.path.join(Mask_path_train, img_name)}
                       for img_name in os.listdir(IMG_path_train)]
-
         # Get the number of TIFF files in training data
         num_train_files = len(train_data)
+
+        # === Log training image/mask paths as input dataset to MLflow ===
+        try:
+            train_df = pd.DataFrame(train_data)
+            dataset_train = mlflow.data.from_pandas(train_df, name="training_dataset")
+            mlflow.log_input(dataset_train, context="training")
+            print(" Training dataset logged to MLflow (image/mask paths).")
+        except Exception as e:
+            print(f" Failed to log training dataset: {e}")
+
+        try:
+            sample_img = tiff.imread(train_data[0]["image"])
+            sample_mask = tiff.imread(train_data[0]["mask"])
+
+            if sample_img.ndim == 3:  # e.g., (H, W, C)
+                sample_img_shape = sample_img.transpose(2, 0, 1).shape  # Convert to (C, H, W)
+            else:
+                sample_img_shape = sample_img.shape
+
+            mlflow.set_tag("train_image_shape", str(sample_img_shape))
+            mlflow.set_tag("train_mask_shape", str(sample_mask.shape))
+
+            print(f" Sample image shape: {sample_img_shape}")
+            print(f" Sample mask shape: {sample_mask.shape}")
+        except Exception as e:
+            print(f" Failed to log sample image/mask shapes: {e}")
 
         # add params for logging
         mlflow_params = {
@@ -109,14 +129,6 @@ def train_func(base_dir_train, model_confg, epoch, model_path, LEARNING_RATE, de
         mlflow_params["class_labels"] = ",".join(class_labels)
         # log params
         mlflow.log_params(mlflow_params)
-        # log tages
-        mlflow.set_tags({
-            "config": model_confg,
-            "experiment": description,
-            "loss": loss_type,
-            "mode": mode
-        })
-
 
         def read_batch(data, index):
             ent = data[index]
@@ -462,10 +474,9 @@ def train_func(base_dir_train, model_confg, epoch, model_path, LEARNING_RATE, de
             print(f"Classification report saved to {classification_report_path}")
 
             # Plot the classification report as a heatmap (exclude 'support' row)
+            filtered_df = class_report_df.loc[class_labels, ['precision', 'recall', 'f1-score']].astype(float)
             plt.figure(figsize=(12, 8))
-            sns.heatmap(class_report_df.iloc[:-1, :-1], annot=True, cmap='Blues', fmt='.2f')
-
-            # Set labels and titles
+            sns.heatmap(filtered_df, annot=True, cmap='Blues', fmt='.2f')
             plt.title('Classification Report')
             plt.yticks(rotation=0)
             plt.xticks(rotation=45)
@@ -476,9 +487,3 @@ def train_func(base_dir_train, model_confg, epoch, model_path, LEARNING_RATE, de
             mlflow.log_artifact(classification_report_plot_path, artifact_path="figures")
             print(f"Classification report plot saved to {classification_report_plot_path}")
             plt.close()
-
-            # Log total runtime
-            mlflow.log_metric("total_runtime_min", (time.time() - start_time) / 60)
-
-            # Log this script (optional but useful for reproducibility)
-            mlflow.log_artifact("main.py", artifact_path="scripts")
