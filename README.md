@@ -90,6 +90,8 @@ pip install -r requirements_2.txt
 ## Executing program
 set parameters and run in run_pipeline.py
 
+**Note** : to run the script with Mlflow please ask me for **mlflow_config** file
+
 ## Authors
 
 * [Benjamin Stöckigt](https://github.com/benjaminstoeckigt)
