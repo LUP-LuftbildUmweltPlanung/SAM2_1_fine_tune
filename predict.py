@@ -15,7 +15,7 @@ from sklearn.metrics import precision_score, recall_score, f1_score
 from tifffile import imread
 import imageio.v2 as imageio
 import hydra
-
+import mlflow
 
 # function to read the binary masks
 def read_mask(image_path):
@@ -25,13 +25,15 @@ def read_mask(image_path):
 
     return imageio.imread(image_path)  # Read the TIFF file as an array
 
-# function to read the whole images 
+
+# function to read the whole images
 def read_image(image_path):
     """Read and resize image using Pillow."""
     if not os.path.exists(image_path):
         raise FileNotFoundError(f"Image file not found: {image_path}")
     img = Image.open(image_path).convert('RGB')  # Convert to RGB
     return np.array(img)
+
 
 # Merge all the predicted file function
 def merge_files(output_folder, AOI, year):
@@ -59,6 +61,7 @@ def merge_files(output_folder, AOI, year):
     gdal.Warp(output_file, tif_files, options=warp_options)
     print(f"Merged file created at: {output_file}")
 
+
 # calculate classufucation report
 def calculate_metrics(pred_masks, gt_masks):
     # Flatten masks for metric calculations
@@ -79,226 +82,255 @@ def calculate_metrics(pred_masks, gt_masks):
     f1 = f1_score(gt_flat, pred_flat, average=average_method, zero_division=0)
 
     return precision, recall, f1
-    
+
+
 def predict_and_save_tiles(input_folder, model_path, mode="binary", model_confg_predict="large", merge=False,
-                           class_zero=False, validation_vision=False, AOI=None, year=None,threshold=0.38, version = "sam2_1"):
-    """Predict canopy cover area for all tiles in a folder and save the results."""
-    all_precisions = []
-    all_recalls = []
-    all_f1s = []
-                               
-    # Set to the current directory
-    current_dir = os.path.abspath(os.path.dirname(__file__))  
-    if version== "sam2_1":
-        # Define the checkpoint and config paths based on model configuration
-        if 'large' in model_confg_predict:
-            checkpoint = "sam2.1_hiera_large.pt"
-            cfg_name = 'sam2.1_hiera_l.yaml'
-        elif 'base_plus' in model_confg_predict:
-            checkpoint = "sam2.1_hiera_base_plus.pt"
-            cfg_name = 'sam2.1_hiera_b+.yaml'
-        elif 'small' in model_confg_predict:
-            checkpoint = "sam2.1_hiera_small.pt"
-            cfg_name = 'sam2.1_hiera_s.yaml'
-        elif 'tiny' in model_confg_predict:
-            checkpoint = "sam2.1_hiera_tiny.pt"
-            cfg_name = 'sam2.1_hiera_t.yaml'
+                           class_zero=False, validation_vision=False, AOI=None, year=None,  threshold=0.38,
+                           version="sam2_1", loss_type="dice"):
+    with mlflow.start_run(run_name=f"{model_confg_predict}_prediction_{year or 'no_year'}"):
+        """Predict canopy cover area for all tiles in a folder and save the results."""
+        all_precisions = []
+        all_recalls = []
+        all_f1s = []
 
-        # Set the paths for checkpoints and config files
-        sam2_checkpoint = os.path.join(current_dir, "sam2_conf/checkpoints", checkpoint)
-        config_dir = os.path.join(current_dir, "sam2/configs", "sam2.1")
-    else: # sam2 
-        if 'large' in model_confg_predict:
-            checkpoint = "sam2_hiera_large.pt"
-            cfg_name = 'sam2_hiera_l.yaml'
-        elif 'base_plus' in model_confg_predict:
-            checkpoint = "sam2_hiera_base_plus.pt"
-            cfg_name = 'sam2_hiera_b+.yaml'
-        elif 'small' in model_confg_predict:
-            checkpoint = "sam2_hiera_small.pt"
-            cfg_name = 'sam2_hiera_s.yaml'
-        elif 'tiny' in model_confg_predict:
-            checkpoint = "sam2_hiera_tiny.pt"
-            cfg_name = 'sam2_hiera_t.yaml'
+        # Set to the current directory
+        current_dir = os.path.abspath(os.path.dirname(__file__))
+        if version == "sam2_1":
+            # Define the checkpoint and config paths based on model configuration
+            if 'large' in model_confg_predict:
+                checkpoint = "sam2.1_hiera_large.pt"
+                cfg_name = 'sam2.1_hiera_l.yaml'
+            elif 'base_plus' in model_confg_predict:
+                checkpoint = "sam2.1_hiera_base_plus.pt"
+                cfg_name = 'sam2.1_hiera_b+.yaml'
+            elif 'small' in model_confg_predict:
+                checkpoint = "sam2.1_hiera_small.pt"
+                cfg_name = 'sam2.1_hiera_s.yaml'
+            elif 'tiny' in model_confg_predict:
+                checkpoint = "sam2.1_hiera_tiny.pt"
+                cfg_name = 'sam2.1_hiera_t.yaml'
 
-        sam2_checkpoint = os.path.join(current_dir, "checkpoints_sam2", checkpoint)
-        config_dir = os.path.join(current_dir, "sam2/configs", "sam2")
+            # Set the paths for checkpoints and config files
+            sam2_checkpoint = os.path.join(current_dir, "sam2_conf/checkpoints", checkpoint)
+            config_dir = os.path.join(current_dir, "sam2/configs", "sam2.1")
+        else:  # sam2
+            if 'large' in model_confg_predict:
+                checkpoint = "sam2_hiera_large.pt"
+                cfg_name = 'sam2_hiera_l.yaml'
+            elif 'base_plus' in model_confg_predict:
+                checkpoint = "sam2_hiera_base_plus.pt"
+                cfg_name = 'sam2_hiera_b+.yaml'
+            elif 'small' in model_confg_predict:
+                checkpoint = "sam2_hiera_small.pt"
+                cfg_name = 'sam2_hiera_s.yaml'
+            elif 'tiny' in model_confg_predict:
+                checkpoint = "sam2_hiera_tiny.pt"
+                cfg_name = 'sam2_hiera_t.yaml'
 
-    # Verify that the checkpoint and config files exist
-    if not os.path.exists(sam2_checkpoint):
-        raise FileNotFoundError(f"Checkpoint not found at: {sam2_checkpoint}")
+            sam2_checkpoint = os.path.join(current_dir, "checkpoints_sam2", checkpoint)
+            config_dir = os.path.join(current_dir, "sam2/configs", "sam2")
 
-    if not os.path.exists(os.path.join(config_dir, cfg_name)):
-        raise FileNotFoundError(f"Config file not found at: {os.path.join(config_dir, cfg_name)}")
+            # set params for mlflow:
+            mlflow_params = {
+                "input_folder": input_folder,
+                "model_path": model_path,
+                "mode": mode,
+                "checkpoint": checkpoint,
+                "cfg_name": cfg_name,
+                "threshold": threshold,
+                "merge": merge,
+                "class_zero": class_zero,
+                "mode": mode,
+                "version": version,
+                "AOI": AOI,
+                "year": year
+            }
+            mlflow.log_params({k: str(v) for k, v in mlflow_params.items()})
 
-    # Re-initialize Hydra configuration for validation
-    hydra.core.global_hydra.GlobalHydra.instance().clear()
-    hydra.initialize_config_dir(config_dir=config_dir, version_base='1.2')
+        # Verify that the checkpoint and config files exist
+        if not os.path.exists(sam2_checkpoint):
+            raise FileNotFoundError(f"Checkpoint not found at: {sam2_checkpoint}")
 
-    # Build the SAM2 model using the configuration and checkpoint
-    sam2_model = build_sam2(cfg_name, sam2_checkpoint, device="cuda")
-    predictor = SAM2ImagePredictor(sam2_model)
+        if not os.path.exists(os.path.join(config_dir, cfg_name)):
+            raise FileNotFoundError(f"Config file not found at: {os.path.join(config_dir, cfg_name)}")
 
-    # Load model weights from the provided model path
-    predictor.model.load_state_dict(torch.load(model_path, map_location="cuda"))
+        # Re-initialize Hydra configuration for validation
+        hydra.core.global_hydra.GlobalHydra.instance().clear()
+        hydra.initialize_config_dir(config_dir=config_dir, version_base='1.2')
 
-    # Set the model to evaluation mode
-    predictor.model.eval()
+        # Build the SAM2 model using the configuration and checkpoint
+        sam2_model = build_sam2(cfg_name, sam2_checkpoint, device="cuda")
+        predictor = SAM2ImagePredictor(sam2_model)
 
-    # Automatically create an output folder beside the input folder
-    model_name = os.path.splitext(os.path.basename(model_path))[0]
-    # Get the parent directory of the input_folder
-    parent_folder = os.path.dirname(input_folder)
-    # Create the output_folder in the parent directory
-    output_folder = os.path.join(parent_folder, f"{model_name}_predict_tiles")
-    os.makedirs(output_folder, exist_ok=True)
+        # Load model weights from the provided model path
+        predictor.model.load_state_dict(torch.load(model_path, map_location="cuda"))
 
-    # Prediction loop
-    with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-        for image_file in tqdm(os.listdir(input_folder), desc="Processing images"):
-            image_path = os.path.join(input_folder, image_file)
-            if not image_file.lower().endswith(('.tif', '.tiff')):
-                continue
+        # Set the model to evaluation mode
+        predictor.model.eval()
 
-            # Read image
-            image = read_image(image_path)
-            if image.dtype == np.float32 or image.dtype == np.int32:
-                image = ((image - image.min()) / (image.max() - image.min()) * 255).astype(np.uint8)
+        # Automatically create an output folder beside the input folder
+        model_name = os.path.splitext(os.path.basename(model_path))[0]
+        # Get the parent directory of the input_folder
+        parent_folder = os.path.dirname(input_folder)
+        # Create the output_folder in the parent directory
+        output_folder = os.path.join(parent_folder, f"{model_name}_predict_tiles")
+        os.makedirs(output_folder, exist_ok=True)
 
-            # Predict masks for the entire image automatically by not passing any points
-            with torch.no_grad(): # prevent the net from caclulate gradient (more efficient inference)
-                predictor.set_image(image) # image encoder
-                masks, scores, logits = predictor.predict(
-                    point_coords=None,
-                    point_labels=None,
-                    multimask_output=False
-                )
-            # Check if scores are 1-dimensional and handle accordingly
-            if scores.ndim == 1:
-                np_scores = scores
-            else:
-                np_scores = scores[:, 0]
-
-            # Convert scores to numpy if necessary
-            if isinstance(np_scores, torch.Tensor):
-                np_scores = np_scores.cpu().numpy()
-
-            # Check if the maximum score is below a certain threshold, e.g., 0.001
-            if np_scores.max() < threshold:
-                # Boost the scores if they are all very low
-                masks = np.zeros_like(masks)
-            else:
-                # Use the original scores if they are above the threshold
-                masks = masks
-                #print(f"boosted_scores for image {image_file}: {masks}")
-            # Sort masks by boosted scores
-            sorted_indices = np.argsort(np_scores)[::-1]
-            sorted_masks = masks[sorted_indices]
-
-            # Stitch predicted masks into one segmentation mask
-            if sorted_masks.ndim == 3:
-                seg_map = np.zeros_like(sorted_masks[0], dtype=np.uint8)
-                occupancy_mask = np.zeros_like(sorted_masks[0], dtype=bool)
-            else:
-                raise ValueError("Unexpected mask dimensions: expected 3D array for masks")
-            '''
-            Next, we add the masks one by one (from high to low score) to the segmentation map. 
-            We only add a mask if it’s consistent with the masks that were previously added,
-            which means only if the mask we want to add has less than 15% overlap with already occupied areas.
-            '''
-            for i in range(sorted_masks.shape[0]):
-                mask = sorted_masks[i].astype(bool)
-                if mask.sum() == 0:
+        # Prediction loop
+        with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+            for image_file in tqdm(os.listdir(input_folder), desc="Processing images"):
+                image_path = os.path.join(input_folder, image_file)
+                if not image_file.lower().endswith(('.tif', '.tiff')):
                     continue
-                if (mask & occupancy_mask).sum() / mask.sum() > 0.15:
-                    continue
-                mask[occupancy_mask] = False
 
-                if mode == "binary":
-                    seg_map[mask] = 1
+                # Read image
+                image = read_image(image_path)
+                if image.dtype == np.float32 or image.dtype == np.int32:
+                    image = ((image - image.min()) / (image.max() - image.min()) * 255).astype(np.uint8)
+
+                # Predict masks for the entire image automatically by not passing any points
+                with torch.no_grad():  # prevent the net from caclulate gradient (more efficient inference)
+                    predictor.set_image(image)  # image encoder
+                    masks, scores, logits = predictor.predict(
+                        point_coords=None,
+                        point_labels=None,
+                        multimask_output=False
+                    )
+                # Check if scores are 1-dimensional and handle accordingly
+                if scores.ndim == 1:
+                    np_scores = scores
                 else:
-                    seg_map[mask] = i + 1
-                occupancy_mask |= mask
+                    np_scores = scores[:, 0]
 
-            # Save the segmentation mask as a TIF file in EPSG:25832
-            output_path = os.path.join(output_folder, os.path.splitext(image_file)[0] + "_predicted.tif")
-            with rasterio.Env(GTIFF_SRS_SOURCE='EPSG'):  # Add this line to set the CRS source to EPSG
-                with rasterio.open(image_path) as src:
-                    transform, width, height = calculate_default_transform(
-                        src.crs, 'EPSG:25832', src.width, src.height, *src.bounds)
-                    kwargs = src.meta.copy()
-                    kwargs.update({
-                        'crs': 'EPSG:25832',
-                        'transform': transform,
-                        'width': width,
-                        'height': height,
-                        'count': 1,  # Ensure the output has a single band for binary mask
-                        'dtype': 'uint8'  # Ensure the data type is uint8 (suitable for binary data)
-                    })
+                # Convert scores to numpy if necessary
+                if isinstance(np_scores, torch.Tensor):
+                    np_scores = np_scores.cpu().numpy()
 
-                    with rasterio.open(output_path, 'w', **kwargs) as dst:
-                        reproject(
-                            source=seg_map,
-                            destination=rasterio.band(dst, 1),
-                            src_transform=src.transform,
-                            src_crs=src.crs,
-                            dst_transform=transform,
-                            dst_crs='EPSG:25832',
-                            resampling=Resampling.nearest
-                        )
+                # Check if the maximum score is below a certain threshold, e.g., 0.001
+                if np_scores.max() < threshold:
+                    # Boost the scores if they are all very low
+                    masks = np.zeros_like(masks)
+                else:
+                    # Use the original scores if they are above the threshold
+                    masks = masks
+                    # print(f"boosted_scores for image {image_file}: {masks}")
+                # Sort masks by boosted scores
+                sorted_indices = np.argsort(np_scores)[::-1]
+                sorted_masks = masks[sorted_indices]
 
-            # Calculate metrics if ground truth is provided
-            if validation_vision:
-                # Replace the last folder name "img_tiles" with "mask_tiles"
-                gt_folder = os.path.join(os.path.dirname(input_folder), "mask_tiles")
-                gt_path = os.path.join(gt_folder, image_file)
-                if os.path.exists(gt_path):
-                    gt_mask = read_mask(gt_path)
-                    if class_zero:
-                        # Transform mask values to 0 and 1 for binary classification
-                        gt_mask[gt_mask == 1] = 0  # Set class '1' to '0'
-                        gt_mask[gt_mask == 2] = 1  # Set class '2' to '1'
-                    precision, recall, f1 = calculate_metrics(seg_map, gt_mask)
-                    all_precisions.append(precision)
-                    all_recalls.append(recall)
-                    all_f1s.append(f1)
+                # Stitch predicted masks into one segmentation mask
+                if sorted_masks.ndim == 3:
+                    seg_map = np.zeros_like(sorted_masks[0], dtype=np.uint8)
+                    occupancy_mask = np.zeros_like(sorted_masks[0], dtype=bool)
+                else:
+                    raise ValueError("Unexpected mask dimensions: expected 3D array for masks")
+                '''
+                Next, we add the masks one by one (from high to low score) to the segmentation map. 
+                We only add a mask if it’s consistent with the masks that were previously added,
+                which means only if the mask we want to add has less than 15% overlap with already occupied areas.
+                '''
+                for i in range(sorted_masks.shape[0]):
+                    mask = sorted_masks[i].astype(bool)
+                    if mask.sum() == 0:
+                        continue
+                    if (mask & occupancy_mask).sum() / mask.sum() > 0.15:
+                        continue
+                    mask[occupancy_mask] = False
 
-    if merge:
-        merge_files(output_folder, AOI=AOI, year=year)
-    if validation_vision:
-        # If you want to print or return the overall metrics:
-        avg_precision = np.mean(all_precisions)
-        avg_recall = np.mean(all_recalls)
-        avg_f1 = np.mean(all_f1s)
-        # print(f"Average Precision: {avg_precision:.4f}, Average Recall: {avg_recall:.4f}, Average F1 Score: {avg_f1:.4f}")
+                    if mode == "binary":
+                        seg_map[mask] = 1
+                    else:
+                        seg_map[mask] = i + 1
+                    occupancy_mask |= mask
 
-        output_folder_m = os.path.join(parent_folder, f"{model_name}_confusion_matrix")
-        os.makedirs(output_folder_m, exist_ok=True)
-        result_path = os.path.join(output_folder_m, "confusion_matrix.csv")
+                # Save the segmentation mask as a TIF file in EPSG:25832
+                output_path = os.path.join(output_folder, os.path.splitext(image_file)[0] + "_predicted.tif")
+                with rasterio.Env(GTIFF_SRS_SOURCE='EPSG'):  # Add this line to set the CRS source to EPSG
+                    with rasterio.open(image_path) as src:
+                        transform, width, height = calculate_default_transform(
+                            src.crs, 'EPSG:25832', src.width, src.height, *src.bounds)
+                        kwargs = src.meta.copy()
+                        kwargs.update({
+                            'crs': 'EPSG:25832',
+                            'transform': transform,
+                            'width': width,
+                            'height': height,
+                            'count': 1,  # Ensure the output has a single band for binary mask
+                            'dtype': 'uint8'  # Ensure the data type is uint8 (suitable for binary data)
+                        })
 
-        # Write the results to the CSV file
-        with open(result_path, mode="w", newline="") as file:
-            writer = csv.writer(file)
+                        with rasterio.open(output_path, 'w', **kwargs) as dst:
+                            reproject(
+                                source=seg_map,
+                                destination=rasterio.band(dst, 1),
+                                src_transform=src.transform,
+                                src_crs=src.crs,
+                                dst_transform=transform,
+                                dst_crs='EPSG:25832',
+                                resampling=Resampling.nearest
+                            )
 
-            # Write the header
-            writer.writerow(["Image Index", "Precision", "Recall", "F1 Score"])
+                # Calculate metrics if ground truth is provided
+                if validation_vision:
+                    # Replace the last folder name "img_tiles" with "mask_tiles"
+                    gt_folder = os.path.join(os.path.dirname(input_folder), "mask_tiles")
+                    gt_path = os.path.join(gt_folder, image_file)
+                    if os.path.exists(gt_path):
+                        gt_mask = read_mask(gt_path)
+                        if class_zero:
+                            # Transform mask values to 0 and 1 for binary classification
+                            gt_mask[gt_mask == 1] = 0  # Set class '1' to '0'
+                            gt_mask[gt_mask == 2] = 1  # Set class '2' to '1'
+                        precision, recall, f1 = calculate_metrics(seg_map, gt_mask)
+                        all_precisions.append(precision)
+                        all_recalls.append(recall)
+                        all_f1s.append(f1)
 
-            # Write the individual metrics for each image
-            for idx, (precision, recall, f1) in enumerate(zip(all_precisions, all_recalls, all_f1s)):
-                writer.writerow([idx, precision, recall, f1])
+        if merge:
+            merge_files(output_folder, AOI=AOI, year=year)
+        if validation_vision:
+            # If you want to print or return the overall metrics:
+            avg_precision = np.mean(all_precisions)
+            avg_recall = np.mean(all_recalls)
+            avg_f1 = np.mean(all_f1s)
+            # print(f"Average Precision: {avg_precision:.4f}, Average Recall: {avg_recall:.4f}, Average F1 Score: {avg_f1:.4f}")
 
-            # Write the average metrics
-            writer.writerow([])  # Blank line for separation
-            writer.writerow(["Average", avg_precision, avg_recall, avg_f1])
+            output_folder_m = os.path.join(parent_folder, f"{model_name}_confusion_matrix")
+            os.makedirs(output_folder_m, exist_ok=True)
+            result_path = os.path.join(output_folder_m, "confusion_matrix.csv")
 
-        print(f"Metrics saved to {result_path}")
+            # Write the results to the CSV file
+            with open(result_path, mode="w", newline="") as file:
+                writer = csv.writer(file)
 
-def predict_valid(input_folder, model_path, mode="binary", model_confg=None, class_zero=False,threshold=threshold, version = "sam2_1"):
+                # Write the header
+                writer.writerow(["Image Index", "Precision", "Recall", "F1 Score"])
+
+                # Write the individual metrics for each image
+                for idx, (precision, recall, f1) in enumerate(zip(all_precisions, all_recalls, all_f1s)):
+                    writer.writerow([idx, precision, recall, f1])
+
+                # Write the average metrics
+                writer.writerow([])  # Blank line for separation
+                writer.writerow(["Average", avg_precision, avg_recall, avg_f1])
+
+            # log the confusion matrix csv file
+            mlflow.log_artifact(result_path, artifact_path="prediction_metrics")
+            print(f"Metrics saved to {result_path}")
+
+            # set metrics:
+            mlflow.log_metric("avg_precision", avg_precision)
+            mlflow.log_metric("avg_recall", avg_recall)
+            mlflow.log_metric("avg_f1_score", avg_f1)
+
+
+def predict_valid(input_folder, model_path, mode="binary", model_confg=None, class_zero=False, threshold=0.38,
+                  version="sam2_1", loss_type="dice"):
     """Predict canopy cover area for all tiles in a folder and save the results."""
 
     # Adjust current_dir to the correct directory level
     current_dir = os.path.abspath(os.path.dirname(__file__))  # Set to the current directory
-    if version== "sam2_1":
+    if version == "sam2_1":
         # Define the checkpoint and config paths based on model configuration
         if 'large' in model_confg:
             checkpoint = "sam2.1_hiera_large.pt"
@@ -333,10 +365,8 @@ def predict_valid(input_folder, model_path, mode="binary", model_confg=None, cla
             checkpoint = "sam2_hiera_tiny.pt"
             cfg_name = 'sam2_hiera_t.yaml'
 
-
         sam2_checkpoint = os.path.join(current_dir, "checkpoints_sam2", checkpoint)
         config_dir = os.path.join(current_dir, "sam2/configs", "sam2")
-
 
     # Verify that the checkpoint and config files exist
     if not os.path.exists(sam2_checkpoint):
@@ -345,7 +375,6 @@ def predict_valid(input_folder, model_path, mode="binary", model_confg=None, cla
     if not os.path.exists(os.path.join(config_dir, cfg_name)):
         raise FileNotFoundError(f"Config file not found at: {os.path.join(config_dir, cfg_name)}")
 
-
     # Re-initialize Hydra configuration for validation
     hydra.core.global_hydra.GlobalHydra.instance().clear()
     hydra.initialize_config_dir(config_dir=config_dir, version_base='1.2')
@@ -353,7 +382,6 @@ def predict_valid(input_folder, model_path, mode="binary", model_confg=None, cla
     # Build the SAM2 model using the configuration and checkpoint
     sam2_model = build_sam2(cfg_name, sam2_checkpoint, device="cuda")
     predictor = SAM2ImagePredictor(sam2_model)
-
 
     # Load the pre-trained weights from the model path
     predictor.model.load_state_dict(torch.load(model_path, map_location="cuda"))
@@ -364,8 +392,9 @@ def predict_valid(input_folder, model_path, mode="binary", model_confg=None, cla
     truth_label = os.path.join(input_folder, "mask_tiles")
 
     # Lists to store metrics
-    iou_scores = []
-    valid_seg_losses = []
+    iou_scores = [] # The Intersection over Union (IoU) between the predicted mask and the ground
+    valid_seg_losses = [] # The segmentation loss (e.g., BCE or Dice loss) per image.
+    valid_total_losses = [] # Combines both segmentation quality and score calibration quality.  (Combined seg + score calibration loss)
     total_seg_loss = 0
     valid_ious = []
 
@@ -466,21 +495,27 @@ def predict_valid(input_folder, model_path, mode="binary", model_confg=None, cla
                 # Calculate IoU using PyTorch tensors
                 inter = (true_mask_tensor * pred_mask_binary).sum()
                 union = true_mask_tensor.sum() + pred_mask_binary.sum() - inter
-                #iou = inter / (union + 1e-5) if union > 0 else 0
+                # iou = inter / (union + 1e-5) if union > 0 else 0
                 iou = inter / (union + 1e-5) if union > 0 else torch.tensor(0.0).cuda()
+
+                # If IoU is a tensor with more than 1 element, average it
+                if iou.numel() > 1:
+                    iou = iou.mean()
                 iou_scores.append(iou)
 
                 # Calculate segmentation loss (binary cross-entropy) using the thresholded binary mask
-                # seg_loss = (-true_mask_tensor * torch.log(pred_mask_binary + 1e-5) -
-                #              (1 - true_mask_tensor) * torch.log((1 - pred_mask_binary) + 1e-5)).mean()
-
-                smooth = 1e-5  # Add a small value to avoid division by zero
-                intersection = (true_mask_tensor * pred_mask_binary).sum()
-                dice_loss = 1 - (2. * intersection + smooth) / (
+                if loss_type == "BCE":
+                    # first method  Binary Cross Entropy (BCE) for a sigmoid layer 0, 1
+                    seg_loss = (-true_mask_tensor * torch.log(pred_mask_binary + 0.00001) - (1 - true_mask_tensor) * torch.log(
+                        (1 - pred_mask_binary) + 0.00001)).mean()  # cross entropy loss
+                elif loss_type == "dice":
+                    smooth = 1e-5
+                    intersection = (true_mask_tensor * pred_mask_binary).sum()
+                    dice_loss = 1 - (2. * intersection + smooth) / (
                             true_mask_tensor.sum() + pred_mask_binary.sum() + smooth)
-
-                # Replace the segmentation loss with dice loss
-                seg_loss = dice_loss
+                    seg_loss = dice_loss
+                else:
+                    raise ValueError(f"Unsupported loss_type '{loss_type}'. Use 'dice' or 'BCE'.")
 
                 # Calculate score loss
                 prd_score_tensor = torch.tensor(np_scores[sorted_indices]).cuda()
@@ -494,6 +529,7 @@ def predict_valid(input_folder, model_path, mode="binary", model_confg=None, cla
                 # print("seg_loss", seg_loss.item())
                 valid_ious.append(iou.item())
                 # print("iou", iou.item())
+                valid_total_losses.append(loss.item())
 
                 total_seg_loss += seg_loss.item()
 
@@ -501,11 +537,14 @@ def predict_valid(input_folder, model_path, mode="binary", model_confg=None, cla
                 print(f"Ground truth mask not found for image {image_file}. Skipping IoU calculation.")
 
     # Compute mean IoU across all images (Move tensors to CPU before converting to NumPy)
-    mean_iou = np.mean([iou.cpu().numpy() for iou in iou_scores]) if iou_scores else 0
+    mean_iou = np.mean([iou.item() for iou in iou_scores]) if iou_scores else 0
 
     # Calculate mean segmentation loss (Move tensors to CPU before converting to NumPy)
     mean_seg_loss = total_seg_loss / len(iou_scores) if iou_scores else 0
 
+    mean_total_loss = np.mean(valid_total_losses) if valid_total_losses else 0
+
     # If you switch back to training later, ensure to set the model back
     predictor.model.train()
-    return mean_iou, mean_seg_loss, true_mask_flat, pred_mask_flat
+    return mean_iou, mean_seg_loss, mean_total_loss, true_mask_flat, pred_mask_flat
+
