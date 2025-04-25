@@ -94,8 +94,9 @@ set parameters and run in run_pipeline.py
 
 ## Authors
 
-* [Benjamin Stöckigt](https://github.com/benjaminstoeckigt)
 * [Shadi Ghantous](https://github.com/Shadiouss)
+* [Benjamin Stöckigt](https://github.com/benjaminstoeckigt)
+
 
 ## Acknowledgments
 
