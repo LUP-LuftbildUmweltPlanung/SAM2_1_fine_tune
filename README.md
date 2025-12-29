@@ -36,7 +36,7 @@ cd ../sam2_1_fine_tune-main
 
 # 4. Clone the SAM2 repository and rename the folder to avoid conflicts
 git clone https://github.com/facebookresearch/sam2.git
-mv sam2 sam2_conf
+ren sam2 sam2_conf
 
 # 5. Change into the 'sam2_conf' directory and copy the 'sam2' folder to the 'sam2_1_fine_tune-main' folder
 cd sam2_conf
