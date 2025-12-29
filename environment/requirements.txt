@@ -11,3 +11,4 @@ seaborn==0.13.2
 slidingwindow==0.0.14
 rasterio==1.3.10
 pympler==1.1
+mlflow==3.8.1
