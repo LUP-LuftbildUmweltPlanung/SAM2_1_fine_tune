@@ -40,7 +40,6 @@ ren sam2 sam2_conf
 
 # 5. Change into the 'sam2_conf' directory and copy the 'sam2' folder to the 'sam2_1_fine_tune-main' folder
 cd sam2_conf
-cp -r sam2 ../sam2/
 
 # 6. Install the SAM2 package in editable mode
 pip install -e .
