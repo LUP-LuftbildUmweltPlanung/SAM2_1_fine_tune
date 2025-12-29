@@ -50,7 +50,7 @@ cd ../..
 cd checkpoints_sam2 && download_ckpts.sh
 
 # 8. Go two directories up and install additional dependencies
-cd environment
+cd ../environment
 pip install -r requirements.txt
 ```
 
